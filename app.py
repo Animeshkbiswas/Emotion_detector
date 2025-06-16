@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, AudioProcessorBase, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, AudioProcessorBase, WebRtcMode
 import av
 import cv2
 import numpy as np
@@ -10,7 +10,7 @@ import time
 import threading
 import logging
 
-# Suppress WebRTC noise
+# Suppress internal WebRTC logs
 logging.getLogger("aioice").setLevel(logging.ERROR)
 logging.getLogger("aiortc").setLevel(logging.ERROR)
 
@@ -20,14 +20,14 @@ st.title("🎥🧠 Real-time Emotion Detection (Video + Audio)")
 video_placeholder = st.empty()
 audio_placeholder = st.empty()
 
-# --- Video Transformer ---
-class EmotionVideoTransformer(VideoTransformerBase):
+# --- Video Processor ---
+class EmotionVideoProcessor(VideoProcessorBase):
     def __init__(self):
         self.current_emotion = "Detecting..."
         self.last_infer_time = 0
-        print("📸 Video Transformer started")
+        print("📸 Video Processor started")
 
-    def transform(self, frame: av.VideoFrame) -> av.VideoFrame:
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         image = frame.to_ndarray(format="bgr24")
 
         try:
@@ -63,12 +63,12 @@ class EmotionVideoTransformer(VideoTransformerBase):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
         except Exception as e:
-            print("Video transform error:", e)
+            print("Video recv error:", e)
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
     def __del__(self):
-        print("❌ Video Transformer stopped")
+        print("❌ Video Processor stopped")
 
 # --- Audio Processor ---
 class EmotionAudioProcessor(AudioProcessorBase):
@@ -105,22 +105,22 @@ class EmotionAudioProcessor(AudioProcessorBase):
     def __del__(self):
         print("❌ Audio Processor stopped")
 
-# --- Start WebRTC Stream ---
+# --- Stream Start ---
 ctx = webrtc_streamer(
     key="emotion-stream",
     mode=WebRtcMode.SENDRECV,
-    video_transformer_factory=EmotionVideoTransformer,
+    video_processor_factory=EmotionVideoProcessor,  # ✅ No deprecation warning
     audio_processor_factory=EmotionAudioProcessor,
     media_stream_constraints={"video": True, "audio": True},
     rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
     async_processing=True,
 )
 
-# --- Update Emotion Display ---
+# --- Update UI ---
 if ctx.state.playing:
     while True:
-        if ctx.video_transformer:
-            video_placeholder.markdown(f"📸 **Video Emotion:** {ctx.video_transformer.current_emotion}")
+        if ctx.video_processor:
+            video_placeholder.markdown(f"📸 **Video Emotion:** {ctx.video_processor.current_emotion}")
         if ctx.audio_processor:
             audio_placeholder.markdown(f"🎙️ **Audio Emotion:** {ctx.audio_processor.current_emotion}")
         time.sleep(1)
